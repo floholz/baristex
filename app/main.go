@@ -66,6 +66,7 @@ type docViewModel struct {
 	Name     string
 	Template string
 	Details  string
+	PDFReady bool
 }
 
 type docsData struct {
@@ -147,7 +148,9 @@ var tmpl = template.Must(template.New("root").Parse(`
     <button hx-post="/documents/{{.ID}}/generate" hx-target="#gen-{{.ID}}" hx-swap="innerHTML" hx-disabled-elt="this">Generate PDF</button>
     <button class="btn-danger" hx-delete="/documents/{{.ID}}" hx-target="#doc-{{.ID}}" hx-swap="outerHTML" hx-confirm="Delete &#39;{{.Name}}&#39;?">Delete</button>
   </div>
-  <div id="gen-{{.ID}}" class="generate-result"></div>
+  <div id="gen-{{.ID}}" class="generate-result">
+    {{if .PDFReady}}<a class="btn-download" href="/documents/{{.ID}}/pdf">&#11015; Download PDF</a>{{end}}
+  </div>
 </li>{{end}}
 
 {{define "docEditCard"}}<li id="doc-{{.Doc.ID}}" class="doc-card editing">
@@ -280,6 +283,7 @@ func toViewModel(doc pbDocument) docViewModel {
 		Name:     doc.Name,
 		Template: doc.Template,
 		Details:  details,
+		PDFReady: pdfExists(doc.ID),
 	}
 }
 
@@ -311,6 +315,11 @@ func getDoc(id, token string) (pbDocument, error) {
 	defer resp.Body.Close()
 	var doc pbDocument
 	return doc, json.NewDecoder(resp.Body).Decode(&doc)
+}
+
+func pdfExists(id string) bool {
+	pdfs, _ := filepath.Glob(filepath.Join(mochatexDataDir, id, "*.pdf"))
+	return len(pdfs) > 0
 }
 
 func sanitizeFilename(name string) string {
