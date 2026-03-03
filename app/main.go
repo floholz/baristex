@@ -17,14 +17,14 @@ import (
 
 const pbURL = "http://localhost:8090"
 
-// Path to the shared mochatex_data volume.
-// On host (local dev): "mochatex_data"
-// In the baristex container: set MOCHATEX_DATA_DIR=/mochatex_data
+// Path to the shared data volume.
+// On host (local dev): "data"
+// In the baristex container: set MOCHATEX_DATA_DIR=/data
 var mochatexDataDir = func() string {
 	if d := os.Getenv("MOCHATEX_DATA_DIR"); d != "" {
 		return d
 	}
-	return "mochatex_data"
+	return "data"
 }()
 
 // --- Data types ---

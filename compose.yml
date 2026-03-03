@@ -3,7 +3,7 @@ services:
         image: mochatex:latest
         container_name: mochatex
         volumes:
-            - ./mochatex_data:/data
+            - ./data:/data
 
     baristex:
         image: baristex:latest
@@ -12,7 +12,7 @@ services:
             pocketbase:
                 condition: service_healthy
         volumes:
-            - ./mochatex_data:/mochatex_data
+            - ./data:/data
 
     pocketbase:
         image: ghcr.io/muchobien/pocketbase:latest
