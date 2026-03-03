@@ -6,26 +6,45 @@
     <title>Baristex</title>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <style>
+        :root {
+            --bg:        #0f1117;
+            --surface:   #1a1d27;
+            --surface2:  #22263a;
+            --border:    #2e3250;
+            --border2:   #3a3f66;
+            --text:      #e2e4f0;
+            --muted:     #6b7099;
+            --accent:    #6366f1;
+            --accent-h:  #818cf8;
+            --danger:    #f87171;
+            --danger-h:  #450a0a;
+            --success:   #4ade80;
+            --green:     #166534;
+            --green-h:   #15803d;
+        }
+
         *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: sans-serif; max-width: 700px; margin: 4rem auto; padding: 0 1rem; }
+        body { font-family: sans-serif; max-width: 700px; margin: 4rem auto; padding: 0 1rem; background: var(--bg); color: var(--text); }
         h1 { margin-bottom: 2rem; }
+        a { color: var(--accent-h); }
 
         /* Auth card */
-        #auth { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+        #auth { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
         #auth h2 { margin-top: 0; }
         #auth input[type="email"],
         #auth input[type="password"],
         #auth input[type="text"] {
             display: block; width: 100%; padding: 0.5rem 0.6rem;
             margin-bottom: 0.75rem; font-size: 1rem;
-            border: 1px solid #ccc; border-radius: 4px;
+            border: 1px solid var(--border2); border-radius: 4px;
+            background: var(--surface2); color: var(--text);
         }
 
         /* Auth header row */
         .auth-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 1.25rem; padding-bottom: 0.75rem;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border);
         }
 
         /* Documents section */
@@ -41,25 +60,27 @@
 
         /* Document card */
         .doc-card {
-            border: 1px solid #ddd; border-radius: 6px; padding: 1rem;
-            background: #fff;
+            border: 1px solid var(--border); border-radius: 6px; padding: 1rem;
+            background: var(--surface);
         }
-        .doc-card.editing { border-color: #4a90e2; }
+        .doc-card.editing { border-color: var(--accent); }
         .doc-card h3 { margin: 0 0 1rem; }
         .doc-info {
             display: flex; justify-content: space-between; align-items: baseline;
             margin-bottom: 0.5rem;
         }
-        .doc-template { font-size: 0.8rem; color: #666; }
+        .doc-template { font-size: 0.8rem; color: var(--muted); }
         .doc-details {
-            background: #f5f5f5; border-radius: 4px; padding: 0.6rem 0.75rem;
+            background: var(--surface2); border-radius: 4px; padding: 0.6rem 0.75rem;
             font-size: 0.85rem; margin: 0.5rem 0;
             white-space: pre-wrap; overflow-x: auto; max-height: 200px;
+            color: var(--text);
         }
         .doc-card textarea {
             display: block; width: 100%; font-family: monospace; font-size: 0.9rem;
-            padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+            padding: 0.5rem; border: 1px solid var(--border2); border-radius: 4px;
             resize: vertical; margin-bottom: 0.5rem;
+            background: var(--surface2); color: var(--text);
         }
         .doc-card label {
             display: block; font-size: 0.9rem; margin-bottom: 0.75rem;
@@ -68,29 +89,31 @@
         .doc-card input[type="text"] {
             display: block; width: 100%; padding: 0.5rem 0.6rem;
             margin-bottom: 0.75rem; font-size: 1rem;
-            border: 1px solid #ccc; border-radius: 4px;
+            border: 1px solid var(--border2); border-radius: 4px;
+            background: var(--surface2); color: var(--text);
         }
 
         /* Actions row */
         .doc-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
 
         /* Buttons */
-        button { padding: 0.4rem 1rem; font-size: 0.9rem; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
-        button:hover { background: #f0f0f0; }
-        button[type="submit"] { background: #333; color: #fff; border-color: #333; }
-        button[type="submit"]:hover { background: #555; }
-        .btn-danger { color: #c00; border-color: #c00; }
-        .btn-danger:hover { background: #ffeaea; }
+        button { padding: 0.4rem 1rem; font-size: 0.9rem; cursor: pointer; border: 1px solid var(--border2); border-radius: 4px; background: var(--surface2); color: var(--text); }
+        button:hover { background: var(--border); }
+        button[type="submit"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+        button[type="submit"]:hover { background: var(--accent-h); border-color: var(--accent-h); }
+        .btn-danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+        .btn-danger:hover { background: var(--danger-h); }
 
         /* Assets */
         .doc-assets { margin: 0.5rem 0; }
         .asset-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
         .asset-tag {
             display: inline-flex; align-items: center; gap: 0.3rem;
-            background: #eef2ff; border: 1px solid #c7d2fe;
+            background: var(--surface2); border: 1px solid var(--accent);
             border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.8rem;
+            color: var(--accent-h);
         }
-        .asset-tag code { font-size: 0.8rem; }
+        .asset-tag code { font-size: 0.8rem; color: var(--accent-h); }
         .btn-xs { padding: 0 0.3rem; font-size: 0.75rem; line-height: 1.4; }
 
         /* Generate result */
@@ -98,15 +121,15 @@
         .generate-result p { margin: 0; }
         .btn-download {
             display: inline-block; padding: 0.4rem 1rem; font-size: 0.9rem;
-            background: #1a6b1a; color: #fff; border-radius: 4px;
+            background: var(--green); color: #fff; border-radius: 4px;
             text-decoration: none;
         }
-        .btn-download:hover { background: #2a8a2a; }
+        .btn-download:hover { background: var(--green-h); }
 
         /* Feedback */
-        .error   { color: #c00; font-size: 0.9rem; margin-bottom: 0.5rem; }
-        .success { color: #080; font-size: 0.9rem; margin-bottom: 0.5rem; }
-        .muted   { color: #888; }
+        .error   { color: var(--danger); font-size: 0.9rem; margin-bottom: 0.5rem; }
+        .success { color: var(--success); font-size: 0.9rem; margin-bottom: 0.5rem; }
+        .muted   { color: var(--muted); }
 
         #auth p { margin: 0.75rem 0 0; font-size: 0.9rem; }
     </style>
