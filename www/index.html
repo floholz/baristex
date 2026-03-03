@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baristex</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 4rem auto; padding: 0 1rem; }
+        input, button { padding: 0.4rem 0.8rem; font-size: 1rem; }
+        #result { margin-top: 1rem; min-height: 1.5rem; }
+    </style>
+</head>
+<body>
+    <h1>Baristex</h1>
+
+    <label for="name">Name:</label>
+    <input id="name" type="text" name="name" placeholder="World" />
+    <button
+        hx-get="/api/greet"
+        hx-include="#name"
+        hx-target="#result"
+        hx-swap="innerHTML">
+        Greet
+    </button>
+
+    <div id="result"></div>
+</body>
+</html>
