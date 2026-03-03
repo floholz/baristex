@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,6 +55,7 @@ type pbDocument struct {
 	Name     string          `json:"name"`
 	Template string          `json:"template"`
 	Details  json.RawMessage `json:"details"`
+	Assets   []string        `json:"assets"`
 	Owner    string          `json:"owner"`
 }
 
@@ -66,6 +68,7 @@ type docViewModel struct {
 	Name     string
 	Template string
 	Details  string
+	Assets   []string
 	PDFReady bool
 }
 
@@ -91,7 +94,10 @@ type generateData struct {
 
 // --- Templates ---
 
-var tmpl = template.Must(template.New("root").Parse(`
+var tmpl = template.Must(template.New("root").Funcs(template.FuncMap{
+	"urlenc":     url.QueryEscape,
+	"stripasset": stripPBSuffix,
+}).Parse(`
 {{define "login"}}<div id="auth">
   <h2>Login</h2>
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
@@ -143,6 +149,26 @@ var tmpl = template.Must(template.New("root").Parse(`
     <code class="doc-template">{{.Template}}</code>
   </div>
   <pre class="doc-details">{{.Details}}</pre>
+  <div class="doc-assets">
+    {{if .Assets}}
+    <div class="asset-list">
+      {{$id := .ID}}
+      {{range .Assets}}<span class="asset-tag">
+        <code>{{stripasset .}}</code>
+        <button class="btn-xs btn-danger"
+                hx-delete="/documents/{{$id}}/assets?file={{urlenc .}}"
+                hx-target="#doc-{{$id}}" hx-swap="outerHTML"
+                hx-confirm="Remove {{stripasset .}}?">&#x2715;</button>
+      </span>{{end}}
+    </div>
+    {{end}}
+    <form hx-post="/documents/{{.ID}}/assets" hx-target="#doc-{{.ID}}" hx-swap="outerHTML" hx-encoding="multipart/form-data">
+      <div class="doc-actions">
+        <input name="assets" type="file" multiple />
+        <button type="submit">Add Assets</button>
+      </div>
+    </form>
+  </div>
   <div class="doc-actions">
     <button hx-get="/documents/{{.ID}}/edit" hx-target="#doc-{{.ID}}" hx-swap="outerHTML">Edit Details</button>
     <button hx-post="/documents/{{.ID}}/generate" hx-target="#gen-{{.ID}}" hx-swap="innerHTML" hx-disabled-elt="this">Generate PDF</button>
@@ -283,6 +309,7 @@ func toViewModel(doc pbDocument) docViewModel {
 		Name:     doc.Name,
 		Template: doc.Template,
 		Details:  details,
+		Assets:   doc.Assets,
 		PDFReady: pdfExists(doc.ID),
 	}
 }
@@ -320,6 +347,27 @@ func getDoc(id, token string) (pbDocument, error) {
 func pdfExists(id string) bool {
 	pdfs, _ := filepath.Glob(filepath.Join(mochatexDataDir, id, "*.pdf"))
 	return len(pdfs) > 0
+}
+
+// stripPBSuffix removes the random hash PocketBase appends to stored filenames.
+// e.g. "logo_vxy38dkm2q.png" → "logo.png"
+func stripPBSuffix(pbName string) string {
+	ext := filepath.Ext(pbName)
+	stem := strings.TrimSuffix(pbName, ext)
+	i := strings.LastIndex(stem, "_")
+	if i <= 0 {
+		return pbName
+	}
+	suffix := stem[i+1:]
+	if len(suffix) < 8 {
+		return pbName
+	}
+	for _, c := range suffix {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			return pbName
+		}
+	}
+	return stem[:i] + ext
 }
 
 func sanitizeFilename(name string) string {
@@ -620,6 +668,79 @@ func main() {
 		// Empty response — HTMX removes the element via outerHTML swap
 	})
 
+	// --- Assets ---
+
+	mux.HandleFunc("POST /documents/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		token := authToken(r)
+		id := r.PathValue("id")
+
+		if err := r.ParseMultipartForm(50 << 20); err != nil {
+			doc, _ := getDoc(id, token)
+			execTmpl(w, "docCard", toViewModel(doc))
+			return
+		}
+
+		files := r.MultipartForm.File["assets"]
+		if len(files) == 0 {
+			doc, _ := getDoc(id, token)
+			execTmpl(w, "docCard", toViewModel(doc))
+			return
+		}
+
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		for _, fh := range files {
+			fw, err := mw.CreateFormFile("assets", fh.Filename)
+			if err != nil {
+				continue
+			}
+			f, err := fh.Open()
+			if err != nil {
+				continue
+			}
+			io.Copy(fw, f)
+			f.Close()
+		}
+		mw.Close()
+
+		req, _ := http.NewRequest("PATCH", pbURL+"/api/collections/documents/records/"+id, &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Authorization", token)
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
+
+		doc, _ := getDoc(id, token)
+		execTmpl(w, "docCard", toViewModel(doc))
+	})
+
+	mux.HandleFunc("DELETE /documents/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		token := authToken(r)
+		id := r.PathValue("id")
+		filename := r.URL.Query().Get("file")
+
+		if filename != "" {
+			var buf bytes.Buffer
+			mw := multipart.NewWriter(&buf)
+			mw.WriteField("assets-", filename)
+			mw.Close()
+
+			req, _ := http.NewRequest("PATCH", pbURL+"/api/collections/documents/records/"+id, &buf)
+			req.Header.Set("Content-Type", mw.FormDataContentType())
+			req.Header.Set("Authorization", token)
+			resp, err := http.DefaultClient.Do(req)
+			if err == nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
+		}
+
+		doc, _ := getDoc(id, token)
+		execTmpl(w, "docCard", toViewModel(doc))
+	})
+
 	// --- PDF generation ---
 
 	mux.HandleFunc("POST /documents/{id}/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -664,6 +785,24 @@ func main() {
 		if err := os.WriteFile(filepath.Join(workDir, "details.json"), details, 0644); err != nil {
 			execTmpl(w, "generateResult", generateData{ID: id, Error: "Failed to write details."})
 			return
+		}
+
+		// Download asset files so they are available next to the template
+		for _, asset := range doc.Assets {
+			assetURL := fmt.Sprintf("/api/files/documents/%s/%s", id, asset)
+			resp, err := pbJSON("GET", assetURL, nil, token)
+			if err != nil || resp.StatusCode != 200 {
+				if resp != nil {
+					io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+				}
+				execTmpl(w, "generateResult", generateData{ID: id, Error: "Failed to download asset: " + asset})
+				return
+			}
+			f, _ := os.Create(filepath.Join(workDir, stripPBSuffix(asset)))
+			io.Copy(f, resp.Body)
+			f.Close()
+			resp.Body.Close()
 		}
 
 		// Run mochatex with the data dir mounted so the container can read/write files
