@@ -12,5 +12,5 @@ LABEL org.opencontainers.image.source=https://github.com/floholz/baristex
 WORKDIR /app
 COPY --from=builder /build/baristex .
 COPY www/ ./www/
-EXPOSE 8080
+EXPOSE 8091
 CMD ["./baristex"]
