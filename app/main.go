@@ -811,11 +811,9 @@ func main() {
 			resp.Body.Close()
 		}
 
-		// Run mochatex with the data dir mounted so the container can read/write files
-		absDataDir, _ := filepath.Abs(mochatexDataDir)
+		// Run mochatex inside the persistent container (volume already mounted)
 		containerDir := "/data/" + id
-		cmd := exec.Command("docker", "run", "--rm",
-			"-v", absDataDir+":/data",
+		cmd := exec.Command("docker", "exec", "mochatex",
 			"mochatex",
 			"-t", containerDir+"/template.tex",
 			"-d", containerDir+"/details.json",

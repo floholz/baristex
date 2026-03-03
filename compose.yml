@@ -2,6 +2,7 @@ services:
     mochatex:
         image: mochatex:latest
         container_name: mochatex
+        entrypoint: ["sleep", "infinity"]
         volumes:
             - ./data:/data
 
