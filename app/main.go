@@ -16,7 +16,13 @@ import (
 	"strings"
 )
 
-const pbURL = "http://localhost:8090"
+// PocketBase URL. In Docker set PB_URL=http://pocketbase:8090
+var pbURL = func() string {
+	if u := os.Getenv("PB_URL"); u != "" {
+		return u
+	}
+	return "http://localhost:8090"
+}()
 
 // Path to the shared data volume.
 // On host (local dev): "data"
