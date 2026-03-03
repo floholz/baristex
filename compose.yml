@@ -8,6 +8,9 @@ services:
     baristex:
         image: baristex:latest
         container_name: baristex
+        depends_on:
+            pocketbase:
+                condition: service_healthy
         volumes:
             - ./mochatex_data:/mochatex_data
 
@@ -20,8 +23,8 @@ services:
             PB_HOST: 0.0.0.0
             PB_PORT: 8090
             # Optional: Auto-create superuser (recommended for production)
-            PB_ADMIN_EMAIL: admin@yourdomain.com
-            PB_ADMIN_PASSWORD: your-secure-password-here
+            PB_ADMIN_EMAIL: admin@floholz.dev
+            PB_ADMIN_PASSWORD: your_secure_password_here
             # Optional: Enable settings encryption (32-character key)
             # https://pocketbase.io/docs/going-to-production/#enable-settings-encryption
             ENCRYPTION: $(openssl rand -hex 16)
