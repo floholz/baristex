@@ -313,6 +313,15 @@ func getDoc(id, token string) (pbDocument, error) {
 	return doc, json.NewDecoder(resp.Body).Decode(&doc)
 }
 
+func sanitizeFilename(name string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return '_'
+	}, name)
+}
+
 func execTmpl(w http.ResponseWriter, name string, data any) {
 	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -674,6 +683,10 @@ func main() {
 			execTmpl(w, "generateResult", generateData{ID: id, Error: "No PDF was produced."})
 			return
 		}
+
+		// Rename to <document_name>.pdf
+		pdfName := sanitizeFilename(doc.Name) + ".pdf"
+		os.Rename(pdfs[0], filepath.Join(workDir, pdfName))
 
 		execTmpl(w, "generateResult", generateData{ID: id, PDFReady: true})
 	})
