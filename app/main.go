@@ -9,10 +9,23 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 const pbURL = "http://localhost:8090"
+
+// Path to the shared mochatex_data volume.
+// On host (local dev): "mochatex_data"
+// In the baristex container: set MOCHATEX_DATA_DIR=/mochatex_data
+var mochatexDataDir = func() string {
+	if d := os.Getenv("MOCHATEX_DATA_DIR"); d != "" {
+		return d
+	}
+	return "mochatex_data"
+}()
 
 // --- Data types ---
 
@@ -67,6 +80,12 @@ type docEditData struct {
 
 type docNewData struct {
 	Error string
+}
+
+type generateData struct {
+	ID       string
+	PDFReady bool
+	Error    string
 }
 
 // --- Templates ---
@@ -125,8 +144,10 @@ var tmpl = template.Must(template.New("root").Parse(`
   <pre class="doc-details">{{.Details}}</pre>
   <div class="doc-actions">
     <button hx-get="/documents/{{.ID}}/edit" hx-target="#doc-{{.ID}}" hx-swap="outerHTML">Edit Details</button>
+    <button hx-post="/documents/{{.ID}}/generate" hx-target="#gen-{{.ID}}" hx-swap="innerHTML" hx-disabled-elt="this">Generate PDF</button>
     <button class="btn-danger" hx-delete="/documents/{{.ID}}" hx-target="#doc-{{.ID}}" hx-swap="outerHTML" hx-confirm="Delete &#39;{{.Name}}&#39;?">Delete</button>
   </div>
+  <div id="gen-{{.ID}}" class="generate-result"></div>
 </li>{{end}}
 
 {{define "docEditCard"}}<li id="doc-{{.Doc.ID}}" class="doc-card editing">
@@ -157,6 +178,12 @@ var tmpl = template.Must(template.New("root").Parse(`
     </div>
   </form>
 </div>{{end}}
+
+{{define "generateResult"}}
+{{if .Error}}<p class="error">{{.Error}}</p>
+{{else}}<a class="btn-download" href="/documents/{{.ID}}/pdf">&#11015; Download PDF</a>
+{{end}}
+{{end}}
 `))
 
 // --- Helpers ---
@@ -573,6 +600,104 @@ func main() {
 		}
 		resp.Body.Close()
 		// Empty response — HTMX removes the element via outerHTML swap
+	})
+
+	// --- PDF generation ---
+
+	mux.HandleFunc("POST /documents/{id}/generate", func(w http.ResponseWriter, r *http.Request) {
+		token := authToken(r)
+		id := r.PathValue("id")
+
+		doc, err := getDoc(id, token)
+		if err != nil {
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "Document not found."})
+			return
+		}
+
+		// Prepare work directory inside the shared volume
+		workDir := filepath.Join(mochatexDataDir, id)
+		if err := os.MkdirAll(workDir, 0755); err != nil {
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "Failed to create work directory: " + err.Error()})
+			return
+		}
+
+		// Download template file from PocketBase
+		templateURL := fmt.Sprintf("/api/files/documents/%s/%s", id, doc.Template)
+		resp, err := pbJSON("GET", templateURL, nil, token)
+		if err != nil || resp.StatusCode != 200 {
+			if resp != nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "Failed to download template."})
+			return
+		}
+		templatePath := filepath.Join(workDir, "template.tex")
+		f, _ := os.Create(templatePath)
+		io.Copy(f, resp.Body)
+		f.Close()
+		resp.Body.Close()
+
+		// Write details JSON to file
+		details := doc.Details
+		if len(details) == 0 || strings.TrimSpace(string(details)) == "null" {
+			details = json.RawMessage("{}")
+		}
+		if err := os.WriteFile(filepath.Join(workDir, "details.json"), details, 0644); err != nil {
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "Failed to write details."})
+			return
+		}
+
+		// Run mochatex with the data dir mounted so the container can read/write files
+		absDataDir, _ := filepath.Abs(mochatexDataDir)
+		containerDir := "/data/" + id
+		cmd := exec.Command("docker", "run", "--rm",
+			"-v", absDataDir+":/data",
+			"mochatex",
+			"-t", containerDir+"/template.tex",
+			"-d", containerDir+"/details.json",
+			containerDir,
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg == "" {
+				msg = err.Error()
+			}
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "Generation failed: " + msg})
+			return
+		}
+
+		// Check a PDF was actually produced
+		pdfs, _ := filepath.Glob(filepath.Join(workDir, "*.pdf"))
+		if len(pdfs) == 0 {
+			execTmpl(w, "generateResult", generateData{ID: id, Error: "No PDF was produced."})
+			return
+		}
+
+		execTmpl(w, "generateResult", generateData{ID: id, PDFReady: true})
+	})
+
+	mux.HandleFunc("GET /documents/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		token := authToken(r)
+		id := r.PathValue("id")
+
+		// Verify the user owns this document
+		if _, err := getDoc(id, token); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
+		pdfs, _ := filepath.Glob(filepath.Join(mochatexDataDir, id, "*.pdf"))
+		if len(pdfs) == 0 {
+			http.Error(w, "PDF not found — generate it first", http.StatusNotFound)
+			return
+		}
+
+		pdfPath := pdfs[0]
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(pdfPath)))
+		http.ServeFile(w, r, pdfPath)
 	})
 
 	fmt.Println("Listening on http://localhost:8080")
