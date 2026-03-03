@@ -8,6 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o baristex ./app
 
 # Runtime stage — docker:cli provides the Docker CLI needed for PDF generation
 FROM docker:cli
+LABEL org.opencontainers.image.source=https://github.com/floholz/baristex
 WORKDIR /app
 COPY --from=builder /build/baristex .
 COPY www/ ./www/
